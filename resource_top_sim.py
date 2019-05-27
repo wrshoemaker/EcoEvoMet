@@ -1,7 +1,8 @@
+from __future__ import division
 import cobra
 import cobra.test
 import numpy as np
-import os, signal, json
+import os, json
 import networkx as nx
 import pandas as pd
 
@@ -21,7 +22,7 @@ def get_A():
     rxns_to_remove = ['Ec_biomass_iJO1366_WT_53p95M', 'Ec_biomass_iJO1366_core_53p95M']
     model = cobra.test.create_test_model("ecoli")
     S_df = cobra.util.array.create_stoichiometric_matrix(model, array_type = 'DataFrame')
-    S_df.drop(rxns_to_remove,axis=1)
+    S_df.drop(rxns_to_remove, axis=1)
     S_df[S_df != 0] = 1
     S_np = S_df.values
     A_np = np.transpose(S_np).dot(S_np)
@@ -36,7 +37,8 @@ def get_dist_A():
     d_A_nx = nx.all_pairs_shortest_path_length(A_nx)
     d_A_df = pd.DataFrame.from_dict(dict(d_A_nx))#, orient='index', columns=metabs)
     d_A_df = pd.DataFrame(data=d_A_df.values, index=metabs, columns=metabs)
-    return d_A_df
+    df_out = path + '/d_iJO1366.txt'
+    d_A_df.to_csv(df_out, sep = '\t', index = True)
 
 
 def get_gene_rxm_df():
@@ -201,9 +203,67 @@ class good_et_al:
         df.to_csv(df_out, sep = '\t', index = True)
 
 
+
+#def get_pair_dist():
+
 def get_clade_dist():
-    d = get_dist_A()
-    print(d)
+    d_df = pd.read_csv(path + '/d_iJO1366.txt', sep = '\t', header = 'infer', index_col = 0)
+    gene_df = pd.read_csv(path + '/m6_gene_by_pop.txt', sep = '\t', header = 'infer', index_col = 0)
+    rxn_df = pd.read_csv(path + '/gene_rxn_table.txt', sep = '\t', header = 'infer', index_col = 0)
+    rxn_genes = rxn_df.gene_name.tolist()
+    rxn_genes = [x for x in rxn_genes if x in gene_df.columns.values]
+    rxns = []
+    rxn_series = []
+    for rxn_gene in rxn_genes:
+        rxn = rxn_df.loc[rxn_df['gene_name'] == rxn_gene, 'reaction'].iloc[0]
+        rxns.append(rxn)
+        gene_column = gene_df[rxn_gene ]
+        rxn_column = gene_column.rename(rxn)
+        rxn_series.append(rxn_column)
+    # no duplicate rxns
+    rxn_time_df = pd.concat(rxn_series, axis=1, keys=[r.name for r in rxn_series])
+    major_clade = rxn_time_df.loc['m6_M_62750']
+    minor_clade = rxn_time_df.loc['m6_m_62750']
+    major_clade = major_clade[major_clade != 0]
+    minor_clade = minor_clade[minor_clade != 0]
+    major_clade_rxns = major_clade.index.values
+    minor_clade_rxns = minor_clade.index.values
+
+    def get_mean_dist(list1, list2):
+        dists = []
+        for i, rxn_i in enumerate(list1):
+            for j, rxn_j in enumerate(list2):
+                if (i < j) or (rxn_i != rxn_j):
+                    dists.append(d_df.loc[rxn_i][rxn_j])
+
+        return np.mean(dists)
+
+    time_points = list(set([int(x.split('_')[2]) for x in rxn_time_df.index.tolist()]))
+    time_points.remove(11750)
+    time_points.remove(11250)
+    time_points.remove(6250)
+    time_points.sort()
+    dist_diff = []
+    dist_diff_m = []
+    dist_diff_M = []
+    for time_point in time_points:
+        rxn_timepoint_m = rxn_time_df.loc['m6_m_' + str(time_point)]
+        rxn_timepoint_M = rxn_time_df.loc['m6_M_' + str(time_point)]
+        rxn_timepoint_m = rxn_timepoint_m[rxn_timepoint_m !=0]
+        rxn_timepoint_M = rxn_timepoint_M[rxn_timepoint_M !=0]
+        rxn_timepoint_m_rxns = rxn_timepoint_m.index.values
+        rxn_timepoint_M_rxns = rxn_timepoint_M.index.values
+
+        m_within = get_mean_dist(rxn_timepoint_m_rxns, rxn_timepoint_m_rxns)
+        M_within = get_mean_dist(rxn_timepoint_M_rxns, rxn_timepoint_M_rxns)
+        m_M_between = get_mean_dist(rxn_timepoint_m_rxns, rxn_timepoint_M_rxns)
+        dist_diff.append(m_M_between / np.mean([m_within, M_within]))
+        dist_diff_m.append(m_M_between / m_within)
+        dist_diff_M.append(m_M_between / M_within)
+
+    df_dists = pd.DataFrame(zip(time_points, dist_diff, dist_diff_m, dist_diff_M), columns=['Time', 'Distance', 'Distance_m', 'Distance_M'])
+    df_out = path + '/time_dist.txt'
+    df_dists.to_csv(df_out, sep = '\t', index = True)
 
 
 
