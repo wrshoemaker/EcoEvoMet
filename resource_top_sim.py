@@ -2,7 +2,7 @@ from __future__ import division
 import cobra
 import cobra.test
 import numpy as np
-import os, json
+import os, json, itertools
 import networkx as nx
 import pandas as pd
 
@@ -18,7 +18,7 @@ to_keep = [x for x in metabs if 'EX_' in x]
 EX_Ec_biomass_iJO1366_WT_53p95M = []
 
 
-def get_A():
+def get_rxns_A():
     rxns_to_remove = ['Ec_biomass_iJO1366_WT_53p95M', 'Ec_biomass_iJO1366_core_53p95M']
     model = cobra.test.create_test_model("ecoli")
     S_df = cobra.util.array.create_stoichiometric_matrix(model, array_type = 'DataFrame')
@@ -32,12 +32,58 @@ def get_A():
 
 
 def get_dist_A():
-    A_df = get_A()
+    A_df = get_rxns_A()
     A_nx = nx.from_numpy_matrix(A_df.values)
     d_A_nx = nx.all_pairs_shortest_path_length(A_nx)
-    d_A_df = pd.DataFrame.from_dict(dict(d_A_nx))#, orient='index', columns=metabs)
+    d_A_df = pd.DataFrame.from_dict(dict(d_A_nx)) #, orient='index', columns=metabs)
     d_A_df = pd.DataFrame(data=d_A_df.values, index=metabs, columns=metabs)
-    df_out = path + '/d_iJO1366.txt'
+    df_out = path + '/d_rxns_iJO1366.txt'
+    d_A_df.to_csv(df_out, sep = '\t', index = True)
+
+
+
+def get_directed_rxn_A():
+    #rxns_to_remove = ['Ec_biomass_iJO1366_WT_53p95M', 'Ec_biomass_iJO1366_core_53p95M']
+    model = cobra.test.create_test_model("ecoli")
+    S_df = cobra.util.array.create_stoichiometric_matrix(model, array_type = 'DataFrame')
+    rxns = S_df.columns.tolist()
+    df_direct_A = pd.DataFrame(index=S_df.columns.values, columns=S_df.columns.values)
+    df_direct_A = df_direct_A.fillna(0)
+    rxn_pairs = list(itertools.combinations(rxns, 2))
+    num_pairs = len(rxn_pairs)
+    for rxn_pair in rxn_pairs:
+        if num_pairs % 1000 == 0:
+            print(str(num_pairs) + " pairs to go!")
+        num_pairs -= 1
+        rxn_pair = list(rxn_pair)
+        if rxn_pair[0] == rxn_pair[1]:
+            continue
+        S_df_rxn_pair = S_df[rxn_pair]
+        S_df_rxn_pair = S_df_rxn_pair[(S_df_rxn_pair != 0).all(1)]
+        if S_df_rxn_pair.shape[0] == 0:
+            continue
+        S_df_rxn_pair[S_df_rxn_pair > 0] = 1
+        S_df_rxn_pair[S_df_rxn_pair < 0] = -1
+        # rxn1 => rxn2
+        rxn1_rxn2 = S_df_rxn_pair.loc[(S_df_rxn_pair[rxn_pair[0]] == -1) & (S_df_rxn_pair[rxn_pair[1]] == 1)]
+        # rxn2 => rxn1
+        rxn2_rxn1 = S_df_rxn_pair.loc[(S_df_rxn_pair[rxn_pair[1]] == -1) & (S_df_rxn_pair[rxn_pair[0]] == 1)]
+        if rxn1_rxn2.shape[0] > 0:
+            df_direct_A.at[rxn_pair[0], rxn_pair[1]] = 1
+        if rxn2_rxn1.shape[0] > 0:
+            df_direct_A.at[rxn_pair[1], rxn_pair[0]] = 1
+
+    df_out = path + '/directed_rxn_A.txt'
+    df_direct_A.to_csv(df_out, sep = '\t', index = True)
+
+
+def get_directed_rxn_d():
+    A_df = pd.read_csv(path + '/directed_rxn_A.txt', sep = '\t', header = 'infer', index_col = 0)
+    A_nx = nx.from_numpy_matrix(A_df.values)
+    d_A_nx = nx.all_pairs_shortest_path_length(A_nx)
+    d_A_df = pd.DataFrame.from_dict(dict(d_A_nx)) #, orient='index', columns=metabs)
+    d_A_df = pd.DataFrame(data=d_A_df.values, index=metabs, columns=metabs)
+    df_out = path + '/d_rxns_iJO1366.txt'
     d_A_df.to_csv(df_out, sep = '\t', index = True)
 
 
@@ -274,5 +320,6 @@ def get_clade_dist():
 #good_et_al().reformat_convergence_matrix()
 #get_m5_mutations()
 #get_gene_rxm_df()
+#get_clade_dist()
 
-get_clade_dist()
+get_directed_rxn_A()
