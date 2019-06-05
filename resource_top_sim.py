@@ -322,4 +322,5 @@ def get_clade_dist():
 #get_gene_rxm_df()
 #get_clade_dist()
 
-get_directed_rxn_A()
+#get_directed_rxn_A()
+get_directed_rxn_d()
