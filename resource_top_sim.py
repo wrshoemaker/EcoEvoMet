@@ -83,7 +83,7 @@ def get_directed_rxn_d():
     d_A_nx = nx.all_pairs_shortest_path_length(A_nx)
     d_A_df = pd.DataFrame.from_dict(dict(d_A_nx)) #, orient='index', columns=metabs)
     d_A_df = pd.DataFrame(data=d_A_df.values, index=metabs, columns=metabs)
-    df_out = path + '/d_rxns_iJO1366.txt'
+    df_out = path + '/directed_rxn_d.txt'
     d_A_df.to_csv(df_out, sep = '\t', index = True)
 
 
