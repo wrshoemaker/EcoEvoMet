@@ -26,7 +26,7 @@ to_skip = ['NTD11pp']
 
 def sim_alpha(model, to_keep, iter=100):
     df_out = open(path + '/alpha_data_2.txt', 'w')
-    header = ['reaction_delete', 'alpha_mean', 'alpha_mag' ,'growth_rate']
+    header = ['reaction', 'alpha_mean', 'alpha_mag' ,'growth_rate']
     df_out.write('\t'.join(header) + '\n')
     s_0 = cobra.sampling.sample(model, iter)
     s_0_in = s_0[to_keep]

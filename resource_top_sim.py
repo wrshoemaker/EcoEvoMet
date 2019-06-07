@@ -6,6 +6,7 @@ import os, json, itertools
 import networkx as nx
 import pandas as pd
 
+
 # end products Ec_biomass_iJO1366_WT_53p95M Ec_biomass_iJO1366_core_53p95M
 
 path = os.path.expanduser("~/GitHub/EcoEvoMet")
@@ -68,8 +69,10 @@ def get_directed_rxn_A():
         rxn1_rxn2 = S_df_rxn_pair.loc[(S_df_rxn_pair[rxn_pair[0]] == -1) & (S_df_rxn_pair[rxn_pair[1]] == 1)]
         # rxn2 => rxn1
         rxn2_rxn1 = S_df_rxn_pair.loc[(S_df_rxn_pair[rxn_pair[1]] == -1) & (S_df_rxn_pair[rxn_pair[0]] == 1)]
+        # out
         if rxn1_rxn2.shape[0] > 0:
             df_direct_A.at[rxn_pair[0], rxn_pair[1]] = 1
+        # in
         if rxn2_rxn1.shape[0] > 0:
             df_direct_A.at[rxn_pair[1], rxn_pair[0]] = 1
 
@@ -82,9 +85,70 @@ def get_directed_rxn_d():
     A_nx = nx.from_numpy_matrix(A_df.values)
     d_A_nx = nx.all_pairs_shortest_path_length(A_nx)
     d_A_df = pd.DataFrame.from_dict(dict(d_A_nx)) #, orient='index', columns=metabs)
-    d_A_df = pd.DataFrame(data=d_A_df.values, index=metabs, columns=metabs)
+    d_A_df = pd.DataFrame(data=d_A_df.values, index=A_df.columns.values.tolist(), columns=A_df.columns.values.tolist())
     df_out = path + '/directed_rxn_d.txt'
     d_A_df.to_csv(df_out, sep = '\t', index = True)
+
+
+def get_directed_rxn_c():
+    A_df = pd.read_csv(path + '/directed_rxn_A.txt', sep = '\t', header = 'infer', index_col = 0)
+    A_nx = nx.from_numpy_matrix(A_df.values)
+    c_A_nx = nx.algorithms.cluster.clustering(A_nx)
+    rxns = A_df.columns.values.tolist()
+    df_out = open(path + '/directed_rxn_c.txt', 'w')
+    header = ['reaction', 'clustering_coef']
+    df_out.write('\t'.join(header) + '\n')
+    for key, value in c_A_nx.items():
+        df_out.write('\t'.join([str( rxns[int(key)] )  , str(value)]) + '\n')
+    df_out.close()
+
+
+
+
+
+
+def get_directed_rxn_k():
+    A_df = pd.read_csv(path + '/directed_rxn_A.txt', sep = '\t', header = 'infer', index_col = 0)
+    rxns = A_df.columns.values.tolist()
+    # sum over column axis
+    # k_out
+    colsums = A_df.fillna(0).astype(bool).sum(axis=1)
+    # sum over index axis
+    # k_in
+    rowsums = A_df.fillna(0).astype(bool).sum(axis=0)
+    df_out = open(path + '/directed_rxn_k.txt', 'w')
+    header = ['reaction', 'k_out', 'k_in']
+    df_out.write('\t'.join(header) + '\n')
+    for i, rxn in enumerate(rxns):
+        k_out = colsums[i]
+        k_in = rowsums[i]
+        df_out.write('\t'.join([rxn, str(k_out), str(k_in)]) + '\n')
+    df_out.close()
+
+
+
+
+def get_directed_rxn_d_resources():
+    A_df = pd.read_csv(path + '/directed_rxn_d.txt', sep = '\t', header = 'infer', index_col = 0)
+    rxns = A_df.columns.tolist()
+    ex_rxns = [x for x in rxns if 'EX_' in x]
+    df_out = open(path + '/directed_rxn_d_ex_rxns.txt', 'w')
+    header = ['reaction', 'num_dists', 'dist_mean']
+    df_out.write('\t'.join(header) + '\n')
+    for rxn in rxns:
+        if rxn in ex_rxns:
+            continue
+        dists = []
+        for ex_rxn in ex_rxns:
+            dist = A_df.at[rxn, ex_rxn]
+            if np.isnan(dist) == True:
+                continue
+            dists.append(dist)
+        df_out.write('\t'.join([rxn, str(len(dists)), str(np.mean(dists))]) + '\n')
+    df_out.close()
+
+
+
 
 
 def get_gene_rxm_df():
@@ -121,37 +185,9 @@ def get_gene_rxm_df():
     df_merge.to_csv(df_out, sep = '\t', index = True)
 
 
-def get_m5_mutations():
-    clade_hmm_states = {'A':0,'E':1,'FB':2,'FM':3, 'Fm':4,'PB':5,'PM':6,'Pm':7,'PB*':8}
-    M_m5 = {}
-    m_m5 = {}
-    with open(path + '/gene_convergence_matrix.txt', "r") as file:
-        for i, line in enumerate(file):
-            if i == 0:
-                continue
-            line = line.strip().split(',')
-            m5 = line[2].strip()
-            if len(m5) == 0:
-                continue
-            muts = m5.split(';')
-            gene = line[0]
-            M_m5[gene] = {}
-            m_m5[gene] = {}
-            for mut in muts:
-                mut_split = mut.split(':')
-                status = int(mut_split[2])
-                time = int(mut_split[0])
-                M_m5[gene][time] = 0
-                m_m5[gene][time] = 0
-                if (status == 3) or (status == 6):
-                    M_m5[gene][time] += 1
 
-                elif (status == 4) or (status == 7):
-                    m_m5[gene][time] += 1
 
-                else:
-                    continue
-    print(M_m5)
+
 
 
 
@@ -253,7 +289,8 @@ class good_et_al:
 #def get_pair_dist():
 
 def get_clade_dist():
-    d_df = pd.read_csv(path + '/d_iJO1366.txt', sep = '\t', header = 'infer', index_col = 0)
+    #d_df = pd.read_csv(path + '/d_iJO1366.txt', sep = '\t', header = 'infer', index_col = 0)
+    d_df = pd.read_csv(path + '/directed_rxn_d.txt', sep = '\t', header = 'infer', index_col = 0)
     gene_df = pd.read_csv(path + '/m6_gene_by_pop.txt', sep = '\t', header = 'infer', index_col = 0)
     rxn_df = pd.read_csv(path + '/gene_rxn_table.txt', sep = '\t', header = 'infer', index_col = 0)
     rxn_genes = rxn_df.gene_name.tolist()
@@ -280,6 +317,8 @@ def get_clade_dist():
         for i, rxn_i in enumerate(list1):
             for j, rxn_j in enumerate(list2):
                 if (i < j) or (rxn_i != rxn_j):
+                    if np.isnan(d_df.loc[rxn_i][rxn_j]):
+                        continue
                     dists.append(d_df.loc[rxn_i][rxn_j])
 
         return np.mean(dists)
@@ -317,10 +356,16 @@ def get_clade_dist():
 
 
 
+
+
+
+#get_directed_rxn_d_resources()
 #good_et_al().reformat_convergence_matrix()
 #get_m5_mutations()
 #get_gene_rxm_df()
 #get_clade_dist()
 
 #get_directed_rxn_A()
-get_directed_rxn_d()
+#get_directed_rxn_d()
+#get_directed_rxn_c()
+#get_directed_rxn_k()
