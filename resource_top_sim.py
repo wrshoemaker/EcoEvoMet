@@ -353,11 +353,21 @@ def get_clade_dist():
 
 
 
+def check_mutations_bifurcation_pathway():
+    gene_df = pd.read_csv(path + '/m6_gene_by_pop.txt', sep = '\t', header = 'infer', index_col = 0)
+    rxn_df = pd.read_csv(path + '/gene_rxn_table.txt', sep = '\t', header = 'infer', index_col = 0)
+
+
+    min_time = min([i.split('_')[2] for i in gene_df.index.to_list() if 'm' in i ])
+    print(min_time)
+    mut_min =  gene_df.loc[ ['m6_m_' + str(min_time), 'm6_M_' + str(min_time)] , : ]
+    mut_min = mut_min.loc[:, (mut_min != 0).any(axis=0)]
+
+    print(mut_min)
 
 
 
-
-
+check_mutations_bifurcation_pathway()
 
 #get_directed_rxn_d_resources()
 #good_et_al().reformat_convergence_matrix()
